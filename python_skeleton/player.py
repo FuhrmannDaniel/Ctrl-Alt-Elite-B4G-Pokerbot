@@ -135,30 +135,63 @@ class Player(Bot):
         continue_cost = opp_pip - my_pip  # the number of chips needed to stay in the pot
         my_contribution = STARTING_STACK - my_stack  # the number of chips you have contributed to the pot
         opp_contribution = STARTING_STACK - opp_stack  # the number of chips your opponent has contributed to the pot
+        min_raise, max_raise = round_state.raise_bounds()
+        pot = sum(round_state.pips)
 
         my_cards = [eval7.Card(card) for card in round_state.hands[active]]
         board_cards = [eval7.Card(card) for card in round_state.deck[:round_state.street]]
 
-        theres_no_time = False
-        hand_strength = 0
-        if theres_no_time:
-            full_hand = my_cards + board_cards
-            hand_strength = eval7.evaluate(full_hand)
-        else:
-            if len(board_cards) < 3: # Pre-flop or Flop
-                hand_strength = self.evaluate_hand_strength(my_cards, board_cards, num_simulations=500)
-            else: # Turn or River
-                hand_strength = self.evaluate_hand_strength(my_cards, board_cards)
+        # theres_no_time = False
+        # hand_strength = 0
+        # if theres_no_time:
+        #     full_hand = my_cards + board_cards
+        #     hand_strength = eval7.evaluate(full_hand)
+        # else:
+        #     if len(board_cards) < 3: # Pre-flop or Flop
+        #         hand_strength = self.evaluate_hand_strength(my_cards, board_cards, num_simulations=500)
+        #     else: # Turn or River
+        #         hand_strength = self.evaluate_hand_strength(my_cards, board_cards)
 
-        if hand_strength > 5000 and RaiseAction in legal_actions:  # Strong hand
-            min_raise, max_raise = round_state.raise_bounds()
-            return RaiseAction(min_raise)
-        elif hand_strength > 3000 and CallAction in legal_actions:  # Decent hand
-            return CallAction()
+        # if hand_strength > 5000 and RaiseAction in legal_actions:  # Strong hand
+        #     min_raise, max_raise = round_state.raise_bounds()
+        #     return RaiseAction(min_raise)
+        # elif hand_strength > 3000 and CallAction in legal_actions:  # Decent hand
+        #     return CallAction()
+        # else:  # Weak hand
+        #     if FoldAction in legal_actions:
+        #         return FoldAction()
+        #     return CheckAction()
+        
+        # Evaluate hand strength
+        hand_strength = self.evaluate_hand_strength(my_cards, board_cards, num_simulations=500)
+
+        # Pot odds calculation
+        pot_odds = continue_cost / (pot + continue_cost) if continue_cost > 0 else 0
+
+        # Decision logic
+        if hand_strength > 0.8:  # Very strong hand
+            if RaiseAction in legal_actions:
+                raise_amount = min_raise + int((hand_strength - 0.8) * (max_raise - min_raise))
+                return RaiseAction(raise_amount)
+            elif CallAction in legal_actions:
+                return CallAction()
+        elif hand_strength > 0.5:  # Decent hand
+            if pot_odds < hand_strength and CallAction in legal_actions:
+                return CallAction()
+            elif CheckAction in legal_actions:
+                return CheckAction()
+        elif hand_strength > 0.3:  # Marginal hand
+            if CheckAction in legal_actions:
+                return CheckAction()
+            elif pot_odds < 0.3 and CallAction in legal_actions:
+                return CallAction()
         else:  # Weak hand
             if FoldAction in legal_actions:
                 return FoldAction()
             return CheckAction()
+
+        # Default action
+        return CheckAction()
 
 
 if __name__ == '__main__':
