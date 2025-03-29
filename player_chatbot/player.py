@@ -17,7 +17,6 @@ from skeleton.states import (
 from dotenv import load_dotenv
 import os
 from pathlib import Path
-env_path = Path(__file__).resolve().parent.parent / ".env"  # Path to .env file
 
 # Set to True if you want to use GPT-4 to generate responses,
 # and False if you want to manually input responses.
@@ -26,6 +25,7 @@ USE_GPT = True
 if USE_GPT:
     import openai
     # Load environment variables from .env file
+    env_path = Path(__file__).resolve().parent.parent / ".env"  # Path to .env file
     load_dotenv(dotenv_path=env_path)
     openai.api_key = os.getenv("API_KEY") # Enter your API key here
 
@@ -42,11 +42,11 @@ ROLE = "You are an expert Poker player who is also good at playing different var
 GAME_RULES = """
 I want you to play a variant of Poker with me.
 How the variant goes is that it is very similar to Texas Hold'em with 2 players. However, in this variant, there is one less round of betting.
-You will initially recieve 3 cards. There will be a round of betting, then 2 card will be revealed on the flop. There will be another round of betting,
+You will initially receive 3 cards. There will be a round of betting, then 2 card will be revealed on the flop. There will be another round of betting,
 then the final 2 cards will be revealed. After this final round of betting, the two players will have a showdown, where standard Texas Hold'em rules 
 will determine the winner. Whenever it is your action, I will give you information about your current
 cards, the current cards on deck, your remaining stack, your contribution to the pot, and the legal
-actions you can take (Raise, Fold, Call, Check). The cards will be formated as 'ab', where b is the
+actions you can take (Raise, Fold, Call, Check). The cards will be formatted as 'ab', where b is the
 suite (h = heart, d = diamond, s = spade, c = club), and a is the type (can be numbers from 2-9, or T (10),
 J (jack), Q (Queen), K (King)). The starting stack for a round is 400, with the small blind being 1 and big
 blind equal 2. I want you to format your response as the following: If you want to Fold, Call or Check,
