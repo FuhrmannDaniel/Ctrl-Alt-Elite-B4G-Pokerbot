@@ -9,12 +9,58 @@ from skeleton.runner import parse_args, run_bot
 
 import random
 import eval7
+import time
 
 
 class Player(Bot):
     '''
     A pokerbot.
     '''
+
+    def regression_line_val(self, x, multiplier):
+        u = 4
+        return 100 * (x / 100) ** u * multiplier
+
+    def get_combinations(self, cards, n):
+        """Generate all combinations of n cards from the list of cards."""
+        if n == 1:
+            return [[card] for card in cards]
+        
+        combinations = []
+        for i in range(len(cards)):
+            for sub_comb in self.get_combinations(cards[i+1:], n-1):
+                combinations.append([cards[i]] + sub_comb)
+        return combinations
+
+    def monte_carlo_simulation(self, hole_cards, community_cards, num_trials=500):
+        deck = [eval7.Card(rank + suit) for rank in "23456789TJQKA" for suit in "shdc"]
+        used_cards = set(hole_cards + community_cards)
+
+        # Remove used cards from the deck
+        deck = [card for card in deck if card not in used_cards]
+
+        wins = 0
+
+        for _ in range(num_trials):
+            random.shuffle(deck)
+            opponent_hole = deck[:3]  # Opponent's 3 hole cards (like player)
+            remaining_board = deck[3: 5 - len(community_cards)]  # Fill in the board
+
+            full_board = community_cards + remaining_board
+
+            # Get all 5-card combinations for both hands
+            my_combinations = self.get_combinations(hole_cards + full_board, 5)
+            opp_combinations = self.get_combinations(opponent_hole + full_board, 5)
+
+            # Evaluate the best hand for both the player and the opponent
+            my_best = max(my_combinations, key=eval7.evaluate)
+            opp_best = max(opp_combinations, key=eval7.evaluate)
+
+            if eval7.evaluate(my_best) > eval7.evaluate(opp_best):
+                wins += 1
+
+        return wins / num_trials  # Win probability
+
 
     def __init__(self):
         '''
@@ -65,51 +111,6 @@ class Player(Bot):
         #my_cards = previous_state.hands[active]  # your cards
         #opp_cards = previous_state.hands[1-active]  # opponent's cards or [] if not revealed
         pass
-    
-    def evaluate_hand_strength(self, hole_cards, board_cards, num_simulations=1000):
-        '''
-        Evaluate the strength of a hand using Monte Carlo simulations.
-
-        Arguments:
-        hole_cards: a list of two eval7.Card objects representing your hole cards.
-        board_cards: a list of eval7.Card objects representing the board cards.
-        num_simulations: the number of Monte Carlo simulations to run.
-
-        Returns:
-        A float representing the win probability (0.0 to 1.0).
-        '''
-        deck = eval7.Deck()
-        for card in hole_cards + board_cards:
-            deck.cards.remove(card)  # Remove known cards from the deck
-
-        wins = 0
-
-        for i in range(num_simulations):
-            deck.shuffle()
-
-            # Deal remaining board cards
-            remaining_board = board_cards + [deck.pop() for _ in range(5 - len(board_cards))]
-
-            # Deal opponent's hole cards
-            opp_hole = [deck.pop(), deck.pop()]
-
-            # Evaluate hands
-            my_hand = hole_cards + remaining_board
-            opp_hand = opp_hole + remaining_board
-
-            my_score = eval7.evaluate(my_hand)
-            opp_score = eval7.evaluate(opp_hand)
-
-            if my_score > opp_score:
-                wins += 1
-            elif my_score == opp_score:
-                wins += 0.5  # Split pot
-            
-            # Early stopping condition
-            if (i > 150) and (wins / (i + 1) > 0.9):  # High confidence in win
-                break
-
-        return wins / num_simulations
 
     def get_action(self, game_state, round_state, active):
         '''
@@ -135,63 +136,65 @@ class Player(Bot):
         continue_cost = opp_pip - my_pip  # the number of chips needed to stay in the pot
         my_contribution = STARTING_STACK - my_stack  # the number of chips you have contributed to the pot
         opp_contribution = STARTING_STACK - opp_stack  # the number of chips your opponent has contributed to the pot
-        min_raise, max_raise = round_state.raise_bounds()
-        pot = sum(round_state.pips)
-
-        my_cards = [eval7.Card(card) for card in round_state.hands[active]]
-        board_cards = [eval7.Card(card) for card in round_state.deck[:round_state.street]]
-
-        # theres_no_time = False
-        # hand_strength = 0
-        # if theres_no_time:
-        #     full_hand = my_cards + board_cards
-        #     hand_strength = eval7.evaluate(full_hand)
-        # else:
-        #     if len(board_cards) < 3: # Pre-flop or Flop
-        #         hand_strength = self.evaluate_hand_strength(my_cards, board_cards, num_simulations=500)
-        #     else: # Turn or River
-        #         hand_strength = self.evaluate_hand_strength(my_cards, board_cards)
-
-        # if hand_strength > 5000 and RaiseAction in legal_actions:  # Strong hand
-        #     min_raise, max_raise = round_state.raise_bounds()
-        #     return RaiseAction(min_raise)
-        # elif hand_strength > 3000 and CallAction in legal_actions:  # Decent hand
-        #     return CallAction()
-        # else:  # Weak hand
-        #     if FoldAction in legal_actions:
-        #         return FoldAction()
-        #     return CheckAction()
         
-        # Evaluate hand strength
-        hand_strength = self.evaluate_hand_strength(my_cards, board_cards, num_simulations=500)
+        my_cards_card_form = [eval7.Card(card) for card in my_cards]
+        board_cards_card_form = [eval7.Card(card) for card in board_cards]
+        
+        win_percentage = self.monte_carlo_simulation(my_cards_card_form, board_cards_card_form)
 
-        # Pot odds calculation
-        pot_odds = continue_cost / (pot + continue_cost) if continue_cost > 0 else 0
+        # actions; RaiseAction, CallAction, CheckAction, FoldAction
 
-        # Decision logic
-        if hand_strength > 0.8:  # Very strong hand
-            if RaiseAction in legal_actions:
-                raise_amount = min_raise + int((hand_strength - 0.8) * (max_raise - min_raise))
-                return RaiseAction(raise_amount)
-            elif CallAction in legal_actions:
-                return CallAction()
-        elif hand_strength > 0.5:  # Decent hand
-            if pot_odds < hand_strength and CallAction in legal_actions:
-                return CallAction()
-            elif CheckAction in legal_actions:
-                return CheckAction()
-        elif hand_strength > 0.3:  # Marginal hand
-            if CheckAction in legal_actions:
-                return CheckAction()
-            elif pot_odds < 0.3 and CallAction in legal_actions:
-                return CallAction()
-        else:  # Weak hand
-            if FoldAction in legal_actions:
+        raise_multipler = 0.26
+        if(street == 3):
+            raise_multipler = 0.5
+        if(street == 4):
+            raise_multipler = 0.75
+        if(street == 5):
+            raise_multipler = 1.0
+
+        call_multiplier = 1.4
+        if(street == 3):
+            call_multiplier = 1.6
+        if(street == 4):    
+            call_multiplier = 1.8
+        if(street == 5):
+            call_multiplier = 2.0
+
+        raise_amount_total = my_stack * self.regression_line_val(100 * win_percentage, raise_multipler)
+        call_max_total = my_stack * self.regression_line_val(100 * win_percentage, call_multiplier)
+
+        raise_amount = raise_amount_total - my_pip # the amount needed to raise to get to raise_amount_total
+        if(raise_amount > my_stack):
+            raise_amount = my_stack
+
+        print(raise_amount_total)
+
+        if CallAction in legal_actions:
+            if opp_pip > call_max_total:
                 return FoldAction()
+            elif opp_pip < raise_amount_total:
+                return RaiseAction(raise_amount)
+            else:
+                return CheckAction()
+
+        if raise_amount > 0:
+        #    min_raise, max_raise = round_state.raise_bounds() # the smallest and largest numbers of chips for a legal bet/raise
+           return RaiseAction(raise_amount_total)
+        if CheckAction in legal_actions and raise_amount < 0:
             return CheckAction()
 
-        # Default action
-        return CheckAction()
+        # if RaiseAction in legal_actions:
+        #    min_raise, max_raise = round_state.raise_bounds()  # the smallest and largest numbers of chips for a legal bet/raise
+        #    min_cost = min_raise - my_pip  # the cost of a minimum bet/raise
+        #    max_cost = max_raise - my_pip  # the cost of a maximum bet/raise
+        # if RaiseAction in legal_actions:
+        #     if random.random() < 0.5:
+        #         return RaiseAction(min_raise)
+        # if CheckAction in legal_actions:  # check-call
+        #     return CheckAction()
+        # if random.random() < 0.25:
+        #     return FoldAction()
+        return CallAction()  # If we can't raise, call if possible
 
 
 if __name__ == '__main__':
