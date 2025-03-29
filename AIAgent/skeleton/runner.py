@@ -32,7 +32,6 @@ class Runner():
         '''
         Encodes an action and sends it to the engine.
         '''
-        print(action)
         if isinstance(action, FoldAction):
             code = 'F'
         elif isinstance(action, CallAction):
