@@ -14,15 +14,20 @@ from skeleton.states import (
     RoundState,
     TerminalState,
 )
+from dotenv import load_dotenv
+import os
+from pathlib import Path
+env_path = Path(__file__).resolve().parent.parent / ".env"  # Path to .env file
 
 # Set to True if you want to use GPT-4 to generate responses,
 # and False if you want to manually input responses.
-USE_GPT = False
+USE_GPT = True
 
 if USE_GPT:
     import openai
-
-    openai.api_key = "" # Enter your API key here
+    # Load environment variables from .env file
+    load_dotenv(dotenv_path=env_path)
+    openai.api_key = os.getenv("API_KEY") # Enter your API key here
 
 
 def chat(messages):
